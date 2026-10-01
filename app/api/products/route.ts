@@ -19,7 +19,7 @@ export async function GET(req: Request) {
           ],
         }
       : undefined,
-    include: { category: true, uom: true },
+    include: { category: true, uom: true, productUoms: { include: { uom: true } } },
     orderBy: { id: "desc" },
     take: 200,
   });
@@ -30,6 +30,10 @@ export async function GET(req: Request) {
       price: money(p.price),
       costPrice: money(p.costPrice),
       stock: stocks.get(p.id) ?? 0,
+      productUoms: p.productUoms.map((pu) => ({
+        ...pu,
+        price: money(pu.price),
+      })),
     })),
   );
 }
@@ -46,6 +50,8 @@ export async function POST(req: Request) {
     price?: number;
     costPrice?: number;
     minStock?: number;
+    initialStock?: number;
+    productUoms?: { uomId: number; conversionFactor: number; price: number }[];
   }>(req);
   if (!b.sku || !b.name || b.price == null || b.costPrice == null) return fail("sku, name, price, costPrice wajib");
   try {
@@ -61,8 +67,24 @@ export async function POST(req: Request) {
         minStock: b.minStock ?? 0,
       },
     });
+    const initial = Number(b.initialStock) || 0;
+    if (initial > 0) {
+      await prisma.stockTx.create({
+        data: { productId: p.id, qtyChange: initial, refType: "adjust", refId: null },
+      });
+    }
+    if (Array.isArray(b.productUoms) && b.productUoms.length > 0) {
+      await prisma.productUom.createMany({
+        data: b.productUoms.map((u) => ({
+          productId: p.id,
+          uomId: Number(u.uomId),
+          conversionFactor: Number(u.conversionFactor || 1),
+          price: Number(u.price || 0),
+        })),
+      });
+    }
     await audit(user!.id, "create", "product", p.id);
-    return json({ ...p, price: money(p.price), costPrice: money(p.costPrice), stock: 0 });
+    return json({ ...p, price: money(p.price), costPrice: money(p.costPrice), stock: initial });
   } catch {
     return fail("SKU/barcode sudah ada", 409);
   }

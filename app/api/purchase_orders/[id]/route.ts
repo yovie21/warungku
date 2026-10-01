@@ -9,10 +9,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { error, user } = await requireUser(req, ["admin", "gudang"]);
   if (error) return error;
   const id = Number((await ctx.params).id);
-  const b = await readJson<{ status?: PoStatus }>(req);
-  if (!b.status) return fail("status wajib");
+  const b = await readJson<{ status?: PoStatus; payAmount?: number }>(req);
   const po = await prisma.purchaseOrder.findUnique({ where: { id }, include: { items: true } });
   if (!po) return fail("PO tidak ada", 404);
+
+  if (b.payAmount != null) {
+    if (po.status !== "received") return fail("Hanya PO diterima yang bisa dibayar");
+    const paid = money(po.paidAmount) + Number(b.payAmount);
+    const updated = await prisma.purchaseOrder.update({
+      where: { id },
+      data: { paidAmount: Math.min(paid, money(po.totalAmount)) },
+    });
+    await audit(user!.id, "pay", "purchase_order", id);
+    return json({ ...updated, totalAmount: money(updated.totalAmount), paidAmount: money(updated.paidAmount) });
+  }
+
+  if (!b.status) return fail("status wajib");
   if (po.status === "received" || po.status === "canceled") return fail("PO sudah final");
 
   if (b.status === "received") {

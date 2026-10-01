@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const { error } = await requireUser(req, ["admin", "gudang"]);
   if (error) return error;
   const rows = await prisma.purchaseOrder.findMany({
-    include: { supplier: true, items: true },
+    include: { supplier: true, items: { include: { product: true } } },
     orderBy: { id: "desc" },
     take: 100,
   });
@@ -18,7 +18,12 @@ export async function GET(req: Request) {
     rows.map((p) => ({
       ...p,
       totalAmount: money(p.totalAmount),
-      items: p.items.map((i) => ({ ...i, unitPrice: money(i.unitPrice) })),
+      paidAmount: money(p.paidAmount),
+      items: p.items.map((i) => ({
+        ...i,
+        unitPrice: money(i.unitPrice),
+        productName: i.product?.name ?? "Produk",
+      })),
     })),
   );
 }

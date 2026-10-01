@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { audit, requireUser } from "@/lib/auth";
 import { fail, json, money, options, readJson } from "@/lib/http";
-import { addStock, stockOf } from "@/lib/stock";
+import { nextInvoiceNo } from "@/lib/invoice";
+import { stockOf } from "@/lib/stock";
 
 export const OPTIONS = options;
 
-type ItemIn = { productId: number; qty: number; unitPrice?: number; discount?: number };
+type ItemIn = { productId: number; qty: number; unitPrice?: number; discount?: number; conversionFactor?: number; uomSymbol?: string };
 
 export async function GET(req: Request) {
   const { error } = await requireUser(req, ["admin", "kasir"]);
@@ -39,48 +40,76 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const { error, user } = await requireUser(req, ["kasir", "admin"]);
   if (error) return error;
-  const b = await readJson<{ items?: ItemIn[]; discount?: number; cashPaid?: number }>(req);
+  const methods = ["tunai", "qris", "transfer", "debit"] as const;
+  type Pay = (typeof methods)[number];
+  const b = await readJson<{ items?: ItemIn[]; discount?: number; cashPaid?: number; paymentMethod?: string }>(req);
   const items = (b.items ?? []).filter((i) => i.productId && i.qty > 0);
   if (items.length === 0) return fail("items wajib");
-  const uniq = new Set(items.map((i) => i.productId));
-  if (uniq.size !== items.length) return fail("produk duplikat di struk");
 
   const products = await prisma.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
   const byId = new Map(products.map((p) => [p.id, p]));
 
   let subtotal = 0;
-  const prepared: { productId: number; qty: number; unitPrice: number; discount: number }[] = [];
+  const need = new Map<number, number>();
+  const prepared: { productId: number; qty: number; unitPrice: number; discount: number; baseQty: number; uomSymbol: string | null; conversionFactor: number }[] = [];
   for (const it of items) {
     const p = byId.get(it.productId);
     if (!p) return fail(`Produk ${it.productId} tidak ada`);
-    const stok = await stockOf(p.id);
-    if (stok < it.qty) return fail(`Stok ${p.name} kurang (${stok})`);
+    const factor = it.conversionFactor ?? 1;
+    const baseQtyNeeded = it.qty * factor;
+    need.set(p.id, (need.get(p.id) ?? 0) + baseQtyNeeded);
     const unit = it.unitPrice ?? money(p.price);
     const disc = it.discount ?? 0;
     subtotal += unit * it.qty - disc;
-    prepared.push({ productId: p.id, qty: it.qty, unitPrice: unit, discount: disc });
+    prepared.push({
+      productId: p.id,
+      qty: it.qty,
+      unitPrice: unit,
+      discount: disc,
+      baseQty: baseQtyNeeded,
+      uomSymbol: it.uomSymbol ?? null,
+      conversionFactor: factor,
+    });
+  }
+  for (const [productId, baseQty] of need) {
+    const p = byId.get(productId)!;
+    const stok = await stockOf(productId);
+    if (stok < baseQty) return fail(`Stok ${p.name} kurang (${stok} < butuh ${baseQty})`);
   }
   const discount = b.discount ?? 0;
   const total = Math.max(0, subtotal - discount);
-  const cashPaid = b.cashPaid ?? total;
-  if (cashPaid < total) return fail("Uang kurang");
-  const changeGiven = cashPaid - total;
+  const method: Pay = methods.includes(b.paymentMethod as Pay) ? (b.paymentMethod as Pay) : "tunai";
+  const cashPaid = method === "tunai" ? (b.cashPaid ?? total) : total;
+  if (method === "tunai" && cashPaid < total) return fail("Uang kurang");
+  const changeGiven = method === "tunai" ? cashPaid - total : 0;
 
   const sale = await prisma.$transaction(async (tx) => {
+    const invoiceNo = await nextInvoiceNo(tx);
     const s = await tx.sale.create({
       data: {
+        invoiceNo,
         userId: user!.id,
         total,
         discount,
         cashPaid,
         changeGiven,
-        items: { create: prepared },
+        paymentMethod: method,
+        items: {
+          create: prepared.map((p) => ({
+            productId: p.productId,
+            qty: p.qty,
+            unitPrice: p.unitPrice,
+            discount: p.discount,
+            uomSymbol: p.uomSymbol,
+            conversionFactor: p.conversionFactor,
+          })),
+        },
       },
       include: { items: true },
     });
     for (const it of prepared) {
       await tx.stockTx.create({
-        data: { productId: it.productId, qtyChange: -it.qty, refType: "sale", refId: s.id },
+        data: { productId: it.productId, qtyChange: -it.baseQty, refType: "sale", refId: s.id },
       });
     }
     return s;
