@@ -16,7 +16,10 @@ export async function POST(req: Request) {
   if (error) return error;
   const b = await readJson<{ name?: string; contact?: string; phone?: string; email?: string; address?: string }>(req);
   if (!b.name) return fail("name wajib");
-  const s = await prisma.supplier.create({ data: { name: b.name.trim(), contact: b.contact?.trim(), phone: b.phone?.trim(), email: b.email?.trim(), address: b.address?.trim() } });
+  const name = b.name.trim();
+  const dup = await prisma.supplier.findFirst({ where: { name } });
+  if (dup) return fail(`Supplier "${name}" sudah ada`, 409);
+  const s = await prisma.supplier.create({ data: { name, contact: b.contact?.trim(), phone: b.phone?.trim(), email: b.email?.trim(), address: b.address?.trim() } });
   await audit(user!.id, "create", "supplier", s.id);
   return json(s);
 }

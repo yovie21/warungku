@@ -16,7 +16,10 @@ export async function POST(req: Request) {
   if (error) return error;
   const b = await readJson<{ name?: string; symbol?: string }>(req);
   if (!b.name) return fail("name wajib");
-  const u = await prisma.uom.create({ data: { name: b.name.trim(), symbol: b.symbol?.trim() ?? "" } });
+  const name = b.name.trim();
+  const dup = await prisma.uom.findFirst({ where: { name } });
+  if (dup) return fail(`Satuan "${name}" sudah ada`, 409);
+  const u = await prisma.uom.create({ data: { name, symbol: b.symbol?.trim() ?? "" } });
   await audit(user!.id, "create", "uom", u.id);
   return json(u);
 }

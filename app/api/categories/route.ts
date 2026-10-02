@@ -16,7 +16,10 @@ export async function POST(req: Request) {
   if (error) return error;
   const b = await readJson<{ name?: string; parentId?: number | null }>(req);
   if (!b.name) return fail("name wajib");
-  const c = await prisma.category.create({ data: { name: b.name.trim(), parentId: b.parentId ?? null } });
+  const name = b.name.trim();
+  const dup = await prisma.category.findFirst({ where: { name, parentId: b.parentId ?? null } });
+  if (dup) return fail(`Kategori "${name}" sudah ada`, 409);
+  const c = await prisma.category.create({ data: { name, parentId: b.parentId ?? null } });
   await audit(user!.id, "create", "category", c.id);
   return json(c);
 }
