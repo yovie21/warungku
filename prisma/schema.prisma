@@ -115,8 +115,9 @@ model Supplier {
 
 model PurchaseOrder {
   id          Int            @id @default(autoincrement())
+  poNo        String?        @unique @map("po_no") @db.VarChar(24)
   supplierId  Int            @map("supplier_id")
-  orderDate   DateTime       @map("order_date") @db.Date
+  orderDate   DateTime       @default(now()) @map("order_date")
   status      PoStatus       @default(draft)
   totalAmount Decimal        @default(0) @map("total_amount") @db.Decimal(12, 2)
   paidAmount  Decimal        @default(0) @map("paid_amount") @db.Decimal(12, 2)

@@ -22,3 +22,15 @@ export async function nextInvoiceNo(tx: Prisma.TransactionClient, at = new Date(
   const seq = Number.isFinite(n) ? n + 1 : 1;
   return `${prefix}${String(seq).padStart(3, "0")}`;
 }
+
+export async function nextPoNo(tx: Prisma.TransactionClient, at = new Date()) {
+  const prefix = `PO-${jakartaYmd(at)}-`;
+  const last = await tx.purchaseOrder.findFirst({
+    where: { poNo: { startsWith: prefix } },
+    orderBy: { poNo: "desc" },
+    select: { poNo: true },
+  });
+  const n = last?.poNo ? Number.parseInt(last.poNo.slice(prefix.length), 10) : 0;
+  const seq = Number.isFinite(n) ? n + 1 : 1;
+  return `${prefix}${String(seq).padStart(3, "0")}`;
+}

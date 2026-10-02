@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { audit, requireUser } from "@/lib/auth";
 import { fail, json, money, options, readJson } from "@/lib/http";
+import { nextPoNo } from "@/lib/invoice";
 
 export const OPTIONS = options;
 
@@ -33,17 +34,29 @@ export async function POST(req: Request) {
   if (error) return error;
   const b = await readJson<{ supplierId?: number; orderDate?: string; items?: ItemIn[] }>(req);
   if (!b.supplierId || !b.items?.length) return fail("supplierId + items wajib");
-  const total = b.items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+  const items = b.items.map(i => ({
+    productId: Number(i.productId),
+    qty: Number(i.qty),
+    unitPrice: Number(i.unitPrice)
+  }));
+  const total = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+  const poNo = await nextPoNo(prisma);
   const po = await prisma.purchaseOrder.create({
     data: {
+      poNo,
       supplierId: b.supplierId,
       orderDate: b.orderDate ? new Date(b.orderDate) : new Date(),
       status: "draft",
       totalAmount: total,
-      items: { create: b.items.map((i) => ({ productId: i.productId, qty: i.qty, unitPrice: i.unitPrice })) },
+      items: { create: items },
     },
     include: { items: true, supplier: true },
   });
   await audit(user!.id, "create", "purchase_order", po.id);
-  return json({ ...po, totalAmount: money(po.totalAmount) });
+  return json({
+    ...po,
+    totalAmount: Number(po.totalAmount),
+    paidAmount: Number(po.paidAmount),
+    items: po.items.map(i => ({ ...i, unitPrice: Number(i.unitPrice) }))
+  });
 }
