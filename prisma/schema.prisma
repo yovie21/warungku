@@ -24,6 +24,7 @@ enum StockRef {
   sale
   purchase
   adjust
+  return
 }
 
 enum PaymentMethod {
@@ -84,6 +85,7 @@ model Product {
   purchaseItems PurchaseItem[]
   promos        Promo[]
   productUoms   ProductUom[]
+  returns       SupplierReturn[]
 
   @@map("products")
 }
@@ -102,13 +104,14 @@ model ProductUom {
 }
 
 model Supplier {
-  id        Int             @id @default(autoincrement())
+  id        Int              @id @default(autoincrement())
   name      String          @db.VarChar(150)
   contact   String?         @db.VarChar(100)
   phone     String?         @db.VarChar(30)
   email     String?         @db.VarChar(100)
   address   String?         @db.Text
   orders    PurchaseOrder[]
+  returns   SupplierReturn[]
 
   @@map("suppliers")
 }
@@ -195,6 +198,20 @@ model SaleItem {
 
   @@index([saleId])
   @@map("sale_items")
+}
+
+model SupplierReturn {
+  id          Int      @id @default(autoincrement())
+  supplierId  Int      @map("supplier_id")
+  productId   Int      @map("product_id")
+  qty         Int
+  reason      String?  @db.VarChar(200)
+  deductDebt  Boolean  @default(true) @map("deduct_debt")
+  createdAt   DateTime @default(now()) @map("created_at")
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@map("supplier_returns")
 }
 
 model AuditLog {
