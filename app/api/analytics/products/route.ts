@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   items.forEach((it) => {
     const pid = it.productId;
     const existing = productMap.get(pid) || { name: it.product.name, qty: 0, revenue: 0, profit: 0 };
-    const rev = money(it.unitPrice) * it.qty * it.conversionFactor;
+    const rev = money(it.unitPrice) * it.qty - money(it.discount);
     const cost = money(it.product.costPrice) * it.qty * it.conversionFactor;
     existing.qty += it.qty * it.conversionFactor;
     existing.revenue += rev;

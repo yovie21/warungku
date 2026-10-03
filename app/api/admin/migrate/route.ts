@@ -21,6 +21,18 @@ export async function POST() {
     `ALTER TABLE sale_items ADD COLUMN uom_symbol VARCHAR(20) NULL`,
     `ALTER TABLE sale_items ADD COLUMN conversion_factor INT NOT NULL DEFAULT 1`,
     `ALTER TABLE sale_items ADD INDEX sale_items_sale_id (sale_id)`,
+    `CREATE TABLE IF NOT EXISTS cash_reconciles (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      biz_date DATE NOT NULL,
+      expected DECIMAL(12,2) NOT NULL,
+      counted DECIMAL(12,2) NOT NULL,
+      diff DECIMAL(12,2) NOT NULL,
+      note VARCHAR(200) NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX cash_reconciles_biz_date (biz_date),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
   ];
   for (const sql of tasks) {
     try {

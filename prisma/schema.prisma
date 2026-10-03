@@ -42,6 +42,7 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   sales        Sale[]
   audits       AuditLog[]
+  reconciles   CashReconcile[]
 
   @@map("users")
 }
@@ -225,4 +226,19 @@ model AuditLog {
 
   @@index([userId])
   @@map("audit_logs")
+}
+
+model CashReconcile {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  bizDate     DateTime @map("biz_date") @db.Date
+  expected    Decimal  @db.Decimal(12, 2)
+  counted     Decimal  @db.Decimal(12, 2)
+  diff        Decimal  @db.Decimal(12, 2)
+  note        String?  @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([bizDate])
+  @@map("cash_reconciles")
 }
