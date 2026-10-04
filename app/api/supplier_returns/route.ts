@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   const ret = await prisma.$transaction(async (tx) => {
     const created = await tx.supplierReturn.create({
       data: {
-        supplierId: b.supplierId ?? null,
+        supplierId: b.supplierId ? b.supplierId : null,
         productId: b.productId!,
         qty: b.qty!,
         reason: b.reason?.trim() ?? "Retur barang rusak/cacat",
