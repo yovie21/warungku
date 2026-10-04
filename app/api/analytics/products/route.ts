@@ -5,7 +5,7 @@ import { json, money, options } from "@/lib/http";
 export const OPTIONS = options;
 
 export async function GET(req: Request) {
-  const { error } = await requireUser(req, ["admin"]);
+  const { error } = await requireUser(req);
   if (error) return error;
 
   const url = new URL(req.url);

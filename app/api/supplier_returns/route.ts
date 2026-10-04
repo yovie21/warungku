@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { audit, requireUser } from "@/lib/auth";
 import { fail, json, options, readJson } from "@/lib/http";
-import { addStock } from "@/lib/stock";
+import { addStock, stockOf } from "@/lib/stock";
 
 export const OPTIONS = options;
 
@@ -33,17 +33,22 @@ export async function POST(req: Request) {
     deductDebt?: boolean;
   }>(req);
 
-  if (!b.supplierId || !b.productId || !b.qty || b.qty <= 0) {
-    return fail("supplierId, productId, dan qty valid wajib diisi");
+  if (!b.productId || !b.qty || b.qty <= 0) {
+    return fail("productId dan qty valid wajib diisi");
   }
 
   const p = await prisma.product.findUnique({ where: { id: b.productId } });
   if (!p) return fail("Produk tidak ditemukan", 404);
 
+  const currentStock = await stockOf(b.productId);
+  if (b.qty > currentStock) {
+    return fail(`Jumlah retur (${b.qty}) melebihi stok yang tersedia (${currentStock})`, 400);
+  }
+
   const ret = await prisma.$transaction(async (tx) => {
     const created = await tx.supplierReturn.create({
       data: {
-        supplierId: b.supplierId!,
+        supplierId: b.supplierId ?? null,
         productId: b.productId!,
         qty: b.qty!,
         reason: b.reason?.trim() ?? "Retur barang rusak/cacat",
