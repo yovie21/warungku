@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { audit, requireUser } from "@/lib/auth";
-import { fail, json, options, readJson } from "@/lib/http";
+import { fail, json, money, options, readJson } from "@/lib/http";
 import { addStock, stockOf } from "@/lib/stock";
 
 export const OPTIONS = options;
@@ -18,7 +18,12 @@ export async function GET(req: Request) {
     take: 100,
   });
 
-  return json(rows);
+  return json(
+    rows.map((r) => ({
+      ...r,
+      product: r.product ? { ...r.product, costPrice: money(r.product.costPrice) } : null,
+    }))
+  );
 }
 
 export async function POST(req: Request) {
