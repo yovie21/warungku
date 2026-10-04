@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const rows = await prisma.supplierReturn.findMany({
     include: {
       supplier: { select: { id: true, name: true } },
-      product: { select: { id: true, name: true, sku: true } },
+      product: { select: { id: true, name: true, sku: true, costPrice: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
